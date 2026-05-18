@@ -1,0 +1,36 @@
+# Dependențe instalate local
+node_modules/
+node_modules/*
+.pnp
+.pnp.js
+
+# Foldere și fișiere generate de Vite / Compilare
+dist/
+dist-ssr/
+.vite/
+.rolldown/
+.eslintcache
+*.local
+
+# Secrete și configurări de mediu
+.env
+.env.local
+.env.*.local
+
+# Loguri de erori
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Configurări specifice sistemului de operare sau editoarelor
+.DS_Store
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw0
