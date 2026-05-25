@@ -1,18 +1,103 @@
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { mockQuestions } from "../mockData";
+import { supabase } from "../lib/supabase";
+import type { Question } from "../types";
 
 function QuestionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // Găsim întrebarea în datele mock
-  const question = mockQuestions.find((q) => q.id === id);
+  const [question, setQuestion] = useState<Question | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchQuestionCompleteData = async () => {
+      if (!id) return;
+
+      try {
+        setLoading(true);
+
+        // Preluăm detaliile întrebării împreună cu autorul și tag-urile
+        const { data: qData, error: qError } = await supabase
+          .from("questions")
+          .select(`
+            *,
+            author:profiles!author_id(id, username),
+            question_tags(tag:tags(name))
+          `)
+          .eq("id", id)
+          .single();
+
+        if (qError) throw qError;
+
+        // Preluăm răspunsurile asociate întrebării și autorii lor
+        const { data: aData, error: aError } = await supabase
+          .from("answers")
+          .select(`
+            *,
+            author:profiles!author_id(id, username)
+          `)
+          .eq("question_id", id)
+          .order("is_accepted", { ascending: false })
+          .order("created_at", { ascending: true });
+
+        if (aError) throw aError;
+
+        // Preluăm comentariile pentru această întrebare
+        const { data: cData, error: cError } = await supabase
+          .from("comments")
+          .select(`
+            *,
+            author:profiles!author_id(username)
+          `)
+          .eq("target_id", id)
+          .eq("target_type", "question")
+          .order("created_at", { ascending: true });
+
+        if (cError) throw cError;
+
+        // Asamblăm obiectul complet conform structurii din interfața `Question`
+        const fullQuestion: Question = {
+          ...qData,
+          author: qData.author || null,
+          question_tags: qData.question_tags || [],
+          // Mapăm răspunsurile adăugând temporar o listă goală de comentarii pentru fiecare
+          answer: (aData || []).map((ans: any) => ({
+            ...ans,
+            author: ans.author || null,
+            comments: [], 
+          })),
+          comments: cData || [],
+          allow_ai_companion: false, // Fallback pentru câmpul lipsă din DB, dar cerut în interface
+        };
+
+        setQuestion(fullQuestion);
+      } catch (err) {
+        console.error("Error loading question details:", err);
+        setQuestion(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchQuestionCompleteData();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div style={{ padding: "80px", textAlign: "center", color: "#64748b", fontFamily: "system-ui" }}>
+        <h2>Loading question details...</h2>
+      </div>
+    );
+  }
 
   if (!question) {
     return (
       <div style={{ padding: "80px", textAlign: "center", color: "#64748b", fontFamily: "system-ui" }}>
         <h2>Question not found</h2>
-        <button onClick={() => navigate("/")} style={{ marginTop: "15px", cursor: "pointer" }}>Go Home</button>
+        <button onClick={() => navigate("/")} style={{ marginTop: "15px", cursor: "pointer", padding: "8px 16px", borderRadius: "6px", border: "1px solid #cbd5e1", backgroundColor: "#fff" }}>
+          Go Home
+        </button>
       </div>
     );
   }
@@ -21,7 +106,7 @@ function QuestionDetail() {
     <div style={pageWrapperStyle}>
       <div style={mainContainerStyle}>
         
-        {/* NAVIGARE ÎNAPOI (Așa cum apare link-ul gri în imagini) */}
+        {/* NAVIGARE ÎNAPOI */}
         <div style={{ marginBottom: "20px" }}>
           <span onClick={() => navigate("/")} style={backLinkStyle}>
             ← All questions
@@ -55,7 +140,7 @@ function QuestionDetail() {
           <div style={bodyColStyle}>
             <p style={descriptionStyle}>{question.description}</p>
             
-            {/* Rândul de Tag-uri (Gri deschis, margini rotunjite) */}
+            {/* Rândul de Tag-uri */}
             <div style={tagRowStyle}>
               {question.question_tags.map((qt, idx) => (
                 <span key={idx} style={tagStyle}>
@@ -88,7 +173,6 @@ function QuestionDetail() {
             key={ans.id} 
             style={{
               ...answerCardStyle,
-              // Dacă e răspuns acceptat, îi punem chenar verde discret exact ca în screenshot
               border: ans.is_accepted ? "1px solid #4ade80" : "1px solid #e2e8f0",
               backgroundColor: ans.is_accepted ? "#f0fdf4" : "#ffffff"
             }}
@@ -104,7 +188,7 @@ function QuestionDetail() {
 
               {/* Conținut Răspuns */}
               <div style={bodyColStyle}>
-                {/* Rândul de Badges (ACCEPTED ANSWER + AI Companion) */}
+                {/* Rândul de Badges */}
                 <div style={{ display: "flex", gap: "8px", marginBottom: "15px", flexWrap: "wrap" }}>
                   {ans.is_accepted && (
                     <span style={acceptedLabelStyle}>ACCEPTED ANSWER</span>
@@ -137,14 +221,13 @@ function QuestionDetail() {
   );
 }
 
-// --- DESIGN SYSTEM (LIGHT MODE - STACK MY OVERFLOW) ---
-
+// --- DESIGN SYSTEM STYLE DICTIONARY (Rămâne neschimbat) ---
 const pageWrapperStyle: React.CSSProperties = {
-  backgroundColor: "#f8fafc", // Fundal gri foarte deschis premium
+  backgroundColor: "#f8fafc",
   minHeight: "100vh",
   padding: "40px 20px",
   fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-  color: "#1e293b", // Text închis la culoare, extrem de lizibil
+  color: "#1e293b",
 };
 
 const mainContainerStyle: React.CSSProperties = {

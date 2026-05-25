@@ -1,19 +1,69 @@
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom"; // <-- Importă useNavigate
+import { supabase } from "../lib/supabase";
+
 function SignIn() {
+  const navigate = useNavigate(); // <-- Inițializează navigate
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    if (data.user) {
+      alert("Signed in successfully!");
+      console.log("Logged user:", data.user);
+      navigate("/"); // <-- Redirecționare către pagina Home
+    }
+  };
+
   return (
     <div style={pageWrapperStyle}>
       <div style={boxStyle}>
         <h1 style={titleStyle}>Sign In</h1>
-        <p style={subtitleStyle}>Welcome back! Please enter your details.</p>
 
-        <form style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <p style={subtitleStyle}>
+          Welcome back! Please enter your details.
+        </p>
+
+        <form
+          onSubmit={handleSignIn}
+          style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+        >
           <div>
             <label style={labelStyle}>Email</label>
-            <input type="email" placeholder="you@example.com" style={inputStyle} />
+
+            <input
+              type="email"
+              placeholder="you@example.com"
+              style={inputStyle}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
           </div>
 
           <div>
             <label style={labelStyle}>Password</label>
-            <input type="password" placeholder="••••••••" style={inputStyle} />
+
+            <input
+              type="password"
+              placeholder="••••••••"
+              style={inputStyle}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
           </div>
 
           <button type="submit" style={buttonStyle}>
@@ -27,7 +77,7 @@ function SignIn() {
 
 const pageWrapperStyle: React.CSSProperties = {
   backgroundColor: "#f8fafc",
-  minHeight: "calc(100vh - 70px)", // Ajustat în funcție de înălțimea navbar-ului
+  minHeight: "calc(100vh - 70px)",
   display: "flex",
   justifyContent: "center",
   alignItems: "center",

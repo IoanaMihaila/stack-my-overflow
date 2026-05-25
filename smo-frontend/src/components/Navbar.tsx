@@ -1,6 +1,17 @@
 import { Link } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth"; // <-- Importă useAuth
+import { supabase } from "../lib/supabase"; // <-- Importă supabase pentru signOut
 
 function Navbar() {
+  const { user } = useAuth(); // <-- Obține utilizatorul curent
+
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      alert(error.message);
+    }
+  };
+
   return (
     <nav style={navStyle}>
       <div style={logoStyle}>
@@ -11,9 +22,37 @@ function Navbar() {
       </div>
       <div style={linksContainerStyle}>
         <Link to="/" style={subLinkStyle}>Home</Link>
-        <Link to="/questions/new" style={subLinkStyle}>Ask Question</Link>
-        <Link to="/signin" style={subLinkStyle}>Sign In</Link>
-        <Link to="/signup" style={buttonStyle}>Sign Up</Link>
+        
+        {/* Link-ul devine needitabil/disabled dacă nu există utilizator */}
+        <Link 
+          to="/questions/new" 
+          style={{
+            ...subLinkStyle,
+            opacity: user ? 1 : 0.5,
+            pointerEvents: user ? "auto" : "none",
+            cursor: user ? "pointer" : "not-allowed"
+          }}
+        >
+          Ask Question
+        </Link>
+
+        {user ? (
+          // Dacă utilizatorul este conectat, îi afișăm numele/email-ul și butonul de Sign Out
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <span style={{ fontSize: "14px", fontWeight: "600", color: "#334155" }}>
+              {user.email}
+            </span>
+            <button onClick={handleSignOut} style={signOutButtonStyle}>
+              Sign Out
+            </button>
+          </div>
+        ) : (
+          // Dacă NU este conectat, afișăm butoanele de autentificare
+          <>
+            <Link to="/signin" style={subLinkStyle}>Sign In</Link>
+            <Link to="/signup" style={buttonStyle}>Sign Up</Link>
+          </>
+        )}
       </div>
     </nav>
   );
@@ -57,12 +96,26 @@ const subLinkStyle: React.CSSProperties = {
 const buttonStyle: React.CSSProperties = {
   padding: "8px 14px",
   borderRadius: "6px",
-  backgroundColor: "#3b82f6", // Albastru modern
+  backgroundColor: "#3b82f6",
   color: "white",
   textDecoration: "none",
   fontSize: "14px",
   fontWeight: "500",
   boxShadow: "0 1px 2px rgba(59, 130, 246, 0.2)",
+};
+
+// Stil nou pentru butonul de Sign Out (un roșu discret/elegant)
+const signOutButtonStyle: React.CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: "6px",
+  backgroundColor: "#ef4444",
+  color: "white",
+  border: "none",
+  fontSize: "14px",
+  fontWeight: "500",
+  cursor: "pointer",
+  boxShadow: "0 1px 2px rgba(239, 68, 68, 0.2)",
+  transition: "background-color 0.15s ease",
 };
 
 export default Navbar;

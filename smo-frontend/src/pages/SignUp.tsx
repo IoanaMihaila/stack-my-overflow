@@ -1,24 +1,80 @@
+import React, { useState } from "react";
+import { supabase } from "../lib/supabase";
+
 function SignUp() {
+  const [chosenUsername, setChosenUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    // Create auth user cu metadata (username)
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username: chosenUsername, // <-- Transmitem username-ul către Supabase Auth
+        },
+      },
+    });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    // Dacă utilizatorul a fost inițializat cu succes în Auth
+    if (data.user) {
+      // Pop-up cerut de tine
+      alert("Verify your email to confirm your identity");
+    }
+  };
+
   return (
     <div style={pageWrapperStyle}>
       <div style={boxStyle}>
         <h1 style={titleStyle}>Create Account</h1>
-        <p style={subtitleStyle}>Join the community to ask questions and find answers.</p>
+        <p style={subtitleStyle}>
+          Join the community to ask questions and find answers.
+        </p>
 
-        <form style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <form onSubmit={handleSignUp} style={formStyle}>
           <div>
             <label style={labelStyle}>Username</label>
-            <input type="text" placeholder="e.g. johndoe" style={inputStyle} />
+            <input
+              type="text"
+              placeholder="e.g. johndoe"
+              style={inputStyle}
+              value={chosenUsername}
+              onChange={(e) => setChosenUsername(e.target.value)}
+              required
+            />
           </div>
 
           <div>
             <label style={labelStyle}>Email</label>
-            <input type="email" placeholder="you@example.com" style={inputStyle} />
+            <input
+              type="email"
+              placeholder="you@example.com"
+              style={inputStyle}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
           </div>
 
           <div>
             <label style={labelStyle}>Password</label>
-            <input type="password" placeholder="••••••••" style={inputStyle} />
+            <input
+              type="password"
+              placeholder="••••••••"
+              style={inputStyle}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
           </div>
 
           <button type="submit" style={buttonStyle}>
@@ -30,6 +86,7 @@ function SignUp() {
   );
 }
 
+// Styles
 const pageWrapperStyle: React.CSSProperties = {
   backgroundColor: "#f8fafc",
   minHeight: "calc(100vh - 70px)",
@@ -63,6 +120,12 @@ const subtitleStyle: React.CSSProperties = {
   margin: "0 0 24px 0",
   textAlign: "center",
   lineHeight: "1.4",
+};
+
+const formStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "16px",
 };
 
 const labelStyle: React.CSSProperties = {

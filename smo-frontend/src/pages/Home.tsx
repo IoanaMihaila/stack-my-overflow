@@ -1,9 +1,36 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { mockQuestions } from "../mockData";
 import QuestionCard from "../components/QuestionCard";
+import { useAuth } from "../hooks/useAuth";
+import { supabase } from "../lib/supabase";
 
 function Home() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [questions, setQuestions] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      const { data, error } = await supabase
+        .from("questions")
+        .select(`
+          *,
+          author:profiles!author_id(username),
+          question_tags(tag:tags(name))
+        `)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      setQuestions(data || []);
+    };
+
+    fetchQuestions();
+  }, []);
 
   return (
     <div style={pageWrapperStyle}>
@@ -11,13 +38,28 @@ function Home() {
         
         <div style={headerRowStyle}>
           <h1 style={titleStyle}>Top Questions</h1>
-          <button onClick={() => navigate("/questions/new")} style={askButtonStyle}>
+
+          <button
+            disabled={!user} // <-- Dezactivează butonul nativ dacă user-ul lipsește
+            onClick={() => {
+              if (!user) {
+                navigate("/signin");
+                return;
+              }
+              navigate("/questions/new");
+            }}
+            style={{
+              ...askButtonStyle,
+              opacity: user ? 1 : 0.5,         // <-- Schimbă opacitatea dacă e disabled
+              cursor: user ? "pointer" : "not-allowed" // <-- Schimbă cursorul
+            }}
+          >
             Ask Question
           </button>
         </div>
 
         <div style={{ marginTop: "20px" }}>
-          {mockQuestions.map((question) => {
+          {questions.map((question) => {
             const summary = {
               id: question.id,
               title: question.title,
@@ -26,7 +68,7 @@ function Home() {
               created_at: question.created_at,
               author: question.author,
               question_tags: question.question_tags,
-              answer_count: question.answer.length,
+              answer_count: 0,
             };
 
             return (
@@ -38,7 +80,7 @@ function Home() {
             );
           })}
         </div>
-        
+
       </div>
     </div>
   );
@@ -79,7 +121,6 @@ const askButtonStyle: React.CSSProperties = {
   borderRadius: "6px",
   fontWeight: "600",
   fontSize: "14px",
-  cursor: "pointer",
   boxShadow: "0 1px 2px rgba(59, 130, 246, 0.15)",
 };
 
