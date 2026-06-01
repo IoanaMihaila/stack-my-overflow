@@ -6,6 +6,16 @@ interface QuestionCardProps {
 }
 
 function QuestionCard({ question, onClick }: QuestionCardProps) {
+  // ⚠️ TRUC DE SIGURANȚĂ: Calculăm dinamic numărul de răspunsuri indiferent de cum îl trimite backend-ul
+  // Verifică proprietatea calculată, array-ul de răspunsuri la plural, array-ul la singular sau agregarea brută.
+  const rawAnswers = (question as any).answers || (question as any).answer || [];
+  
+  const totalAnswers = typeof question.answer_count === "number" && question.answer_count > 0 
+    ? question.answer_count 
+    : (Array.isArray(rawAnswers) && typeof rawAnswers[0]?.count === "number" 
+        ? rawAnswers[0].count 
+        : (Array.isArray(rawAnswers) ? rawAnswers.length : 0));
+
   return (
     <div
       onClick={onClick}
@@ -32,12 +42,13 @@ function QuestionCard({ question, onClick }: QuestionCardProps) {
 
       <div style={statsRowStyle}>
         <div style={statItemStyle}>
-          <span style={statNumberStyle}>{question.vote_count}</span>
+          <span style={statNumberStyle}>{question.vote_count || 0}</span>
           <span style={statLabelStyle}>votes</span>
         </div>
         <div style={statItemStyle}>
-          <span style={{ ...statNumberStyle, color: question.answer_count > 0 ? "#16a34a" : "#475569" }}>
-            {question.answer_count}
+          {/* CORECTAT: Afișăm numărul calculat dinamic totalAnswers */}
+          <span style={{ ...statNumberStyle, color: totalAnswers > 0 ? "#16a34a" : "#475569" }}>
+            {totalAnswers}
           </span>
           <span style={statLabelStyle}>answers</span>
         </div>
@@ -45,7 +56,8 @@ function QuestionCard({ question, onClick }: QuestionCardProps) {
 
       <div style={footerRowStyle}>
         <div style={tagRowStyle}>
-          {question.question_tags.map((qt, idx) => (
+          {/* Adăugat fallback-ul || [] și optional chaining ?. pentru a preveni orice crash */}
+          {(question.question_tags || []).map((qt: any, idx: number) => (
             <span
               key={idx}
               style={{
@@ -56,13 +68,13 @@ function QuestionCard({ question, onClick }: QuestionCardProps) {
                 fontSize: "13px",
               }}
             >
-              {qt.tag.name}
+              {qt.tag?.name || qt.tag_name || "tag"}
             </span>
           ))}
         </div>
         
         <div style={metaStyle}>
-          asked by <span style={authorStyle}>{question.author?.username || "anonymous"}</span> • {new Date(question.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          asked by <span style={authorStyle}>{question.author?.username || "anonymous"}</span> • {question.created_at ? new Date(question.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : "Recently"}
         </div>
       </div>
     </div>

@@ -1,7 +1,10 @@
 import React, { useState } from "react";
-import { supabase } from "../lib/supabase";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 
 function SignUp() {
+  const navigate = useNavigate();
+  const { register } = useAuth(); // Folosim metoda din hook-ul custom
   const [chosenUsername, setChosenUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -9,26 +12,15 @@ function SignUp() {
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    // Create auth user cu metadata (username)
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username: chosenUsername, // <-- Transmitem username-ul către Supabase Auth
-        },
-      },
-    });
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    // Dacă utilizatorul a fost inițializat cu succes în Auth
-    if (data.user) {
-      // Pop-up cerut de tine
-      alert("Verify your email to confirm your identity");
+    try {
+      // Apelăm metoda de register din useAuth (care va salva token-urile și user-ul în localStorage)
+      await register(email, password, chosenUsername);
+      
+      alert("Account created and verified successfully!");
+      navigate("/"); // Îl trimitem direct pe Home deoarece este deja logat automat de metodă
+    } catch (error: any) {
+      console.error("Eroare la înregistrare:", error);
+      alert(error.message || "Eroare la înregistrare.");
     }
   };
 
@@ -86,7 +78,6 @@ function SignUp() {
   );
 }
 
-// Styles
 const pageWrapperStyle: React.CSSProperties = {
   backgroundColor: "#f8fafc",
   minHeight: "calc(100vh - 70px)",

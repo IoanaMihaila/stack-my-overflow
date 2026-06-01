@@ -1,87 +1,149 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth"; 
+import { request } from "../lib/api"; 
 import type { Question } from "../types";
+import { VoteButton } from "../components/VoteButton";
 
 function QuestionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth(); 
 
   const [question, setQuestion] = useState<Question | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  const [newAnswerBody, setNewAnswerBody] = useState("");
+  const [submittingAnswer, setSubmittingAnswer] = useState(false);
+
+  // Încărcarea datelor se face acum securizat prin Express Backend rute
+  const fetchQuestionCompleteData = async () => {
+    if (!id) return;
+    try {
+      setLoading(true);
+      const data = await request(`/questions/${id}`);
+      
+      if (data && data.question) {
+        // Aliniem structura cu tipurile din types.ts (proprietatea .answer la singular)
+        const formattedQuestion: Question = {
+          ...data.question,
+          answer: data.question.answers || data.question.answer || [],
+          question_tags: data.question.question_tags || []
+        };
+        setQuestion(formattedQuestion);
+      }
+    } catch (err) {
+      console.error("Error loading question details via backend middleware:", err);
+      setQuestion(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchQuestionCompleteData = async () => {
-      if (!id) return;
+  let isCurrentRequest = true; // Flag pentru a ignora apelurile vechi care întârzie
 
-      try {
+  const loadData = async () => {
+    if (!id) return;
+    try {
+      // Pornim încărcarea doar dacă request-ul curent este cel activ
+      if (isCurrentRequest) {
         setLoading(true);
-
-        // Preluăm detaliile întrebării împreună cu autorul și tag-urile
-        const { data: qData, error: qError } = await supabase
-          .from("questions")
-          .select(`
-            *,
-            author:profiles!author_id(id, username),
-            question_tags(tag:tags(name))
-          `)
-          .eq("id", id)
-          .single();
-
-        if (qError) throw qError;
-
-        // Preluăm răspunsurile asociate întrebării și autorii lor
-        const { data: aData, error: aError } = await supabase
-          .from("answers")
-          .select(`
-            *,
-            author:profiles!author_id(id, username)
-          `)
-          .eq("question_id", id)
-          .order("is_accepted", { ascending: false })
-          .order("created_at", { ascending: true });
-
-        if (aError) throw aError;
-
-        // Preluăm comentariile pentru această întrebare
-        const { data: cData, error: cError } = await supabase
-          .from("comments")
-          .select(`
-            *,
-            author:profiles!author_id(username)
-          `)
-          .eq("target_id", id)
-          .eq("target_type", "question")
-          .order("created_at", { ascending: true });
-
-        if (cError) throw cError;
-
-        // Asamblăm obiectul complet conform structurii din interfața `Question`
-        const fullQuestion: Question = {
-          ...qData,
-          author: qData.author || null,
-          question_tags: qData.question_tags || [],
-          // Mapăm răspunsurile adăugând temporar o listă goală de comentarii pentru fiecare
-          answer: (aData || []).map((ans: any) => ({
-            ...ans,
-            author: ans.author || null,
-            comments: [], 
-          })),
-          comments: cData || [],
-          allow_ai_companion: false, // Fallback pentru câmpul lipsă din DB, dar cerut în interface
+      }
+      
+      const data = await request(`/questions/${id}`);
+      
+      // Dacă utilizatorul a apucat deja să voteze între timp sau useEffect-ul s-a curățat, ignorăm rezultatul învechit
+      if (data && data.question && isCurrentRequest) {
+        const formattedQuestion: Question = {
+          ...data.question,
+          answer: data.question.answers || data.question.answer || [],
+          question_tags: data.question.question_tags || []
         };
-
-        setQuestion(fullQuestion);
-      } catch (err) {
-        console.error("Error loading question details:", err);
-        setQuestion(null);
-      } finally {
+        setQuestion(formattedQuestion);
+      }
+    } catch (err) {
+      console.error("Error loading question details:", err);
+      if (isCurrentRequest) setQuestion(null);
+    } finally {
+      if (isCurrentRequest) {
         setLoading(false);
       }
-    };
+    }
+  };
 
-    fetchQuestionCompleteData();
-  }, [id]);
+  loadData();
+
+  // Funcția de cleanup: când React 18 omoară primul montaj din StrictMode, 
+  // flag-ul devine false, iar primul request (cel întârziat) nu va mai suprascrie ecranul!
+  return () => {
+    isCurrentRequest = false;
+  };
+}, [id]);
+
+  const handleAnswerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAnswerBody.trim() || !id) return;
+
+    try {
+      setSubmittingAnswer(true);
+      await request(`/questions/${id}/answers`, {
+        method: "POST",
+        body: JSON.stringify({ body: newAnswerBody })
+      });
+
+      setNewAnswerBody(""); 
+      alert("Answer posted successfully!");
+      await fetchQuestionCompleteData();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to post the answer. Please try again.");
+    } finally {
+      setSubmittingAnswer(false);
+    }
+  };
+
+  // IMPLEMENTAT: Callback-ul asincron trimis către componenta de vot (Part 2)
+// În QuestionDetail.tsx:
+  const handleQuestionVote = async (value: 1 | -1) => {
+    if (!id || !question) return;
+    
+    try {
+      const response = await request(`/questions/${id}/vote`, {
+        method: "PATCH",
+        body: JSON.stringify({ value })
+      });
+
+      // Verificăm răspunsul de la backend (care acum returnează snake_case 'vote_count')
+      if (response && typeof response.vote_count === "number") {
+        setQuestion(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            vote_count: response.vote_count
+          };
+        });
+      }
+    } catch (err) {
+      console.error("Failed to sync vote with backend:", err);
+      // Aruncăm eroarea mai departe pentru ca componenta VoteButton să poată rula rollback-ul optimist automat!
+      throw err; 
+    }
+  };
+
+  // IMPLEMENTAT: Acceptare răspuns (Part 1)
+  const handleAcceptAnswer = async (answerId: string) => {
+    try {
+      await request(`/answers/${answerId}/accept`, {
+        method: "PATCH"
+      });
+      alert("Answer marked as accepted!");
+      await fetchQuestionCompleteData(); 
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to accept the answer.");
+    }
+  };
 
   if (loading) {
     return (
@@ -102,18 +164,18 @@ function QuestionDetail() {
     );
   }
 
+  const isQuestionAuthor = user && question.author_id === user.id;
+
   return (
     <div style={pageWrapperStyle}>
       <div style={mainContainerStyle}>
         
-        {/* NAVIGARE ÎNAPOI */}
         <div style={{ marginBottom: "20px" }}>
           <span onClick={() => navigate("/")} style={backLinkStyle}>
             ← All questions
           </span>
         </div>
 
-        {/* --- HEADER ÎNTREBARE --- */}
         <header style={headerStyle}>
           <div style={titleRowStyle}>
             <h1 style={titleStyle}>{question.title}</h1>
@@ -127,32 +189,24 @@ function QuestionDetail() {
           </div>
         </header>
 
-        {/* --- GRID CORP ÎNTREBARE --- */}
         <div style={contentGridStyle}>
-          {/* Sistem Vot Stânga */}
-          <div style={voteColStyle}>
-            <button style={voteTriangleStyle}>▲</button>
-            <span style={voteCountStyle}>{question.vote_count}</span>
-            <button style={voteTriangleStyle}>▼</button>
-          </div>
+          {/* Conectăm componenta VoteButton la numărul reactiv și la callback-ul nostru de API */}
+          <VoteButton count={question.vote_count || 0} onVote={handleQuestionVote} />
 
-          {/* Textul Întrebării, Tag-uri și Comentarii */}
           <div style={bodyColStyle}>
             <p style={descriptionStyle}>{question.description}</p>
             
-            {/* Rândul de Tag-uri */}
             <div style={tagRowStyle}>
-              {question.question_tags.map((qt, idx) => (
+              {(question.question_tags || []).map((qt: any, idx: number) => (
                 <span key={idx} style={tagStyle}>
-                  {qt.tag.name}
+                  {qt.tag?.name || qt.tag_name || "tag"}
                 </span>
               ))}
             </div>
 
-            {/* Comentarii Întrebare */}
             {question.comments && question.comments.length > 0 && (
               <div style={commentSectionStyle}>
-                {question.comments.map((comment) => (
+                {question.comments.map((comment: any) => (
                   <div key={comment.id} style={commentItemStyle}>
                     {comment.body} – <span style={commentAuthorStyle}>{comment.author?.username || "anonymous"}</span>
                     <span style={commentDateStyle}> {new Date(comment.created_at).toLocaleDateString()}</span>
@@ -163,12 +217,11 @@ function QuestionDetail() {
           </div>
         </div>
 
-        {/* --- SECȚIUNE RĂSPUNSURI --- */}
         <div style={answersCountStyle}>
-          {question.answer.length} {question.answer.length === 1 ? "Answer" : "Answers"}
+          {(question.answer || []).length} {(question.answer || []).length === 1 ? "Answer" : "Answers"}
         </div>
 
-        {question.answer.map((ans) => (
+        {(question.answer || []).map((ans: any) => (
           <div 
             key={ans.id} 
             style={{
@@ -178,50 +231,89 @@ function QuestionDetail() {
             }}
           >
             <div style={contentGridStyle}>
-              {/* Voturi Răspuns + Bifă Mare Verde */}
+              {/* Răspunsurile folosesc butoane statice conform instrucțiunilor (nu au rută de vot dedicate răspunsurilor) */}
               <div style={voteColStyle}>
-                <button style={voteTriangleStyle}>▲</button>
-                <span style={voteCountStyle}>{ans.vote_count}</span>
-                <button style={voteTriangleStyle}>▼</button>
+                <button style={{ ...voteTriangleStyle, cursor: "not-allowed" }}>▲</button>
+                <span style={voteCountStyle}>{ans.vote_count || 0}</span>
+                <button style={{ ...voteTriangleStyle, cursor: "not-allowed" }}>▼</button>
                 {ans.is_accepted && <div style={acceptedCheckStyle}>✓</div>}
               </div>
 
-              {/* Conținut Răspuns */}
               <div style={bodyColStyle}>
-                {/* Rândul de Badges */}
-                <div style={{ display: "flex", gap: "8px", marginBottom: "15px", flexWrap: "wrap" }}>
-                  {ans.is_accepted && (
-                    <span style={acceptedLabelStyle}>ACCEPTED ANSWER</span>
-                  )}
-                  {ans.is_ai_generated && (
-                    <span style={aiCompanionLabelStyle}>✦ AI Companion</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px", flexWrap: "wrap", gap: "8px" }}>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {ans.is_accepted && <span style={acceptedLabelStyle}>ACCEPTED ANSWER</span>}
+                    {ans.is_ai_generated && <span style={aiCompanionLabelStyle}>✦ AI Companion</span>}
+                  </div>
+                  
+                  {/* Butonul de acceptare se randează doar pentru cel care a pus întrebarea */}
+                  {isQuestionAuthor && !ans.is_accepted && (
+                    <button 
+                      onClick={() => handleAcceptAnswer(ans.id)}
+                      style={acceptAnswerButtonStyle}
+                    >
+                      Accept Answer
+                    </button>
                   )}
                 </div>
 
-                <h3 style={answerTitleStyle}>{ans.body.split('\n')[0]}</h3>
                 <p style={answerBodyStyle}>{ans.body}</p>
-
-                {/* Comentarii Răspuns */}
-                {ans.comments && ans.comments.length > 0 && (
-                  <div style={commentSectionStyle}>
-                    {ans.comments.map((c) => (
-                      <div key={c.id} style={commentItemStyle}>
-                        {c.body} – <span style={commentAuthorStyle}>{c.author?.username || "anonymous"}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div style={{ marginTop: "12px", fontSize: "13px", color: "#64748b" }}>
+                  answered by <strong>{ans.author?.username || "anonymous"}</strong>
+                </div>
               </div>
             </div>
           </div>
         ))}
+
+        <div style={{ marginTop: "40px", borderTop: "1px solid #e2e8f0", paddingTop: "30px" }}>
+          <h2 style={{ fontSize: "20px", fontWeight: "600", marginBottom: "16px", color: "#0f172a" }}>
+            Your Answer
+          </h2>
+          
+          {user ? (
+            <form onSubmit={handleAnswerSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <textarea
+                rows={6}
+                placeholder="Write your answer here in detail..."
+                value={newAnswerBody}
+                onChange={(e) => setNewAnswerBody(e.target.value)}
+                required
+                disabled={submittingAnswer}
+                style={textareaStyle}
+              />
+              <div>
+                <button
+                  type="submit"
+                  disabled={submittingAnswer || !newAnswerBody.trim()}
+                  style={{
+                    ...submitAnswerButtonStyle,
+                    opacity: (submittingAnswer || !newAnswerBody.trim()) ? 0.6 : 1,
+                    cursor: (submittingAnswer || !newAnswerBody.trim()) ? "not-allowed" : "pointer"
+                  }}
+                >
+                  {submittingAnswer ? "Posting..." : "Post Your Answer"}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div style={authAlertBoxStyle}>
+              <p style={{ margin: 0, fontSize: "14px", fontWeight: "500" }}>
+                You must be logged in to answer this question.{" "}
+                <Link to="/signin" style={{ color: "#2563eb", fontWeight: "600", textDecoration: "none" }}>
+                  Sign In here
+                </Link>.
+              </p>
+            </div>
+          )}
+        </div>
 
       </div>
     </div>
   );
 }
 
-// --- DESIGN SYSTEM STYLE DICTIONARY (Rămâne neschimbat) ---
+// --- DESIGN SYSTEM STYLE DICTIONARY ---
 const pageWrapperStyle: React.CSSProperties = {
   backgroundColor: "#f8fafc",
   minHeight: "100vh",
@@ -412,6 +504,51 @@ const answerBodyStyle: React.CSSProperties = {
   color: "#334155",
   margin: 0,
   whiteSpace: "pre-wrap"
+};
+
+const textareaStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "16px",
+  borderRadius: "8px",
+  border: "1px solid #cbd5e1",
+  fontSize: "15px",
+  lineHeight: "1.5",
+  fontFamily: "inherit",
+  boxSizing: "border-box",
+  boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+  outlineColor: "#3b82f6",
+};
+
+const submitAnswerButtonStyle: React.CSSProperties = {
+  backgroundColor: "#3b82f6",
+  color: "white",
+  border: "none",
+  padding: "12px 20px",
+  borderRadius: "6px",
+  fontWeight: "600",
+  fontSize: "14px",
+  boxShadow: "0 1px 2px rgba(59, 130, 246, 0.2)",
+  transition: "all 0.15s ease",
+};
+
+const acceptAnswerButtonStyle: React.CSSProperties = {
+  backgroundColor: "#22c55e",
+  color: "white",
+  border: "none",
+  padding: "6px 12px",
+  borderRadius: "6px",
+  fontWeight: "600",
+  fontSize: "12px",
+  cursor: "pointer",
+  boxShadow: "0 1px 2px rgba(34, 197, 94, 0.2)",
+};
+
+const authAlertBoxStyle: React.CSSProperties = {
+  backgroundColor: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  color: "#1e40af",
+  padding: "16px",
+  borderRadius: "8px",
 };
 
 export default QuestionDetail;

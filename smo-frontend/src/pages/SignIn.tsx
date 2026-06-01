@@ -1,29 +1,30 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom"; // <-- Importă useNavigate
-import { supabase } from "../lib/supabase";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 
 function SignIn() {
-  const navigate = useNavigate(); // <-- Inițializează navigate
-  const [email, setEmail] = useState("");
+  const navigate = useNavigate();
+  const { login } = useAuth(); 
+  const [usernameOrEmail, setUsernameOrEmail] = useState(""); // Redenumit starea pentru claritate
   const [password, setPassword] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setErrorMsg("");
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      // Pasăm starea redenumită către hook
+      const data = await login(usernameOrEmail, password);
 
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    if (data.user) {
-      alert("Signed in successfully!");
-      console.log("Logged user:", data.user);
-      navigate("/"); // <-- Redirecționare către pagina Home
+      if (data && data.user) {
+        alert("Signed in successfully!");
+        navigate("/"); 
+      }
+    } catch (error: any) {
+      console.error("Eroare la Sign In:", error);
+      setErrorMsg(error.message || "Username/Email sau parolă incorectă.");
+      alert(error.message || "Eroare la autentificare.");
     }
   };
 
@@ -36,26 +37,31 @@ function SignIn() {
           Welcome back! Please enter your details.
         </p>
 
+        {errorMsg && (
+          <p style={{ color: "#ef4444", fontSize: "14px", textAlign: "center", marginBottom: "16px" }}>
+            {errorMsg}
+          </p>
+        )}
+
         <form
           onSubmit={handleSignIn}
           style={{ display: "flex", flexDirection: "column", gap: "16px" }}
         >
           <div>
-            <label style={labelStyle}>Email</label>
-
+            {/* CORECTAT TEXTUL ETICHETEI */}
+            <label style={labelStyle}>Username or Email</label>
             <input
-              type="email"
-              placeholder="you@example.com"
+              type="text" // Schimbat din "email" în "text" ca să accepte caractere fără @
+              placeholder="your_username or you@example.com"
               style={inputStyle}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={usernameOrEmail}
+              onChange={(e) => setUsernameOrEmail(e.target.value)}
               required
             />
           </div>
 
           <div>
             <label style={labelStyle}>Password</label>
-
             <input
               type="password"
               placeholder="••••••••"

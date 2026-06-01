@@ -1,14 +1,15 @@
 import { Link } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth"; // <-- Importă useAuth
-import { supabase } from "../lib/supabase"; // <-- Importă supabase pentru signOut
+import { useAuth } from "../hooks/useAuth"; // <-- Folosește useAuth-ul nostru personalizat
 
 function Navbar() {
-  const { user } = useAuth(); // <-- Obține utilizatorul curent
+  // MODIFICAT: Luăm și funcția logout din useAuth care șterge localStorage-ul backend-ului
+  const { user, logout } = useAuth(); 
 
   const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      alert(error.message);
+    try {
+      await logout();
+    } catch (err) {
+      console.error("Eroare la delogare:", err);
     }
   };
 
@@ -23,7 +24,7 @@ function Navbar() {
       <div style={linksContainerStyle}>
         <Link to="/" style={subLinkStyle}>Home</Link>
         
-        {/* Link-ul devine needitabil/disabled dacă nu există utilizator */}
+        {/* Link-ul devine needitabil/disabled dacă nu există utilizator în state-ul backend-ului */}
         <Link 
           to="/questions/new" 
           style={{
@@ -37,10 +38,11 @@ function Navbar() {
         </Link>
 
         {user ? (
-          // Dacă utilizatorul este conectat, îi afișăm numele/email-ul și butonul de Sign Out
+          // Dacă utilizatorul este conectat în sistemul nou, îi afișăm USERNAME-ul din profiles
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
             <span style={{ fontSize: "14px", fontWeight: "600", color: "#334155" }}>
-              {user.email}
+              {/* CORECTAT: Schimbat din user.email în user.username */}
+              {user.username || user.email}
             </span>
             <button onClick={handleSignOut} style={signOutButtonStyle}>
               Sign Out
@@ -104,7 +106,6 @@ const buttonStyle: React.CSSProperties = {
   boxShadow: "0 1px 2px rgba(59, 130, 246, 0.2)",
 };
 
-// Stil nou pentru butonul de Sign Out (un roșu discret/elegant)
 const signOutButtonStyle: React.CSSProperties = {
   padding: "8px 14px",
   borderRadius: "6px",

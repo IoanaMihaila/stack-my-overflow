@@ -4,7 +4,7 @@ import Home from "./pages/Home";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp"; 
 import AskQuestion from "./pages/AskQuestion";
-import QuestionDetail from "./pages/QuestionDetail"; // <-- Importă noua pagină
+import QuestionDetail from "./pages/QuestionDetail";
 
 function App() {
   return (
@@ -15,7 +15,7 @@ function App() {
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/questions/new" element={<AskQuestion />} />
-        <Route path="/questions/:id" element={<QuestionDetail />} /> {/* <-- Rută dinamică */}
+        <Route path="/questions/:id" element={<QuestionDetail />} />
       </Routes>
     </BrowserRouter>
   );
