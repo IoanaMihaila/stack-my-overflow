@@ -9,9 +9,11 @@ app.use(express.json());
 const authRoutes = require('../routes/auth'); 
 const questionsRoutes = require('../routes/questions'); // Importat router întrebări
 const answersRoutes = require('../routes/answers');
+const aiRoutes = require('../routes/ai');
 
 app.use('/auth', authRoutes);
 app.use('/questions', questionsRoutes); // Legat router întrebări la calea potrivită
+app.use('/ai', aiRoutes);
 
 app.get('/health', (req, res) => {
     return res.status(200).json({ ok: true });
@@ -19,7 +21,7 @@ app.get('/health', (req, res) => {
 
 app.use('/', answersRoutes);
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`🚀 Server up and running on port ${PORT}`);
+const PORT = 3000;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`=== SERVERUL E VIU PE PORTUL ${PORT} ===`);
 });

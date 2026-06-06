@@ -84,3 +84,16 @@ export const voteQuestion = (id: string, value: 1 | -1) =>
         method: 'PATCH', 
         body: JSON.stringify({ value }) 
     });
+
+// =========================================================================
+// AI Feature — Lab 7 Functions
+// =========================================================================
+
+export const suggestTags = (title: string): Promise<{ tags: string[] }> =>
+    request('/ai/tags', {
+        method: 'POST',
+        body: JSON.stringify({ title })
+    });
+
+export const aiHealth = (): Promise<{ ok: boolean; rateLimited?: boolean; provider?: string; model?: string }> =>
+    request('/ai/health');

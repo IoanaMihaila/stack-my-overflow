@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../hooks/useAuth";
+import { aiHealth, suggestTags } from "../lib/api"; // Importăm funcțiile adăugate în api.ts
 
 function AskQuestion() {
   const { user } = useAuth();
@@ -14,6 +15,63 @@ function AskQuestion() {
   const [tags, setTags] = useState<string[]>([]);
   const [currentInput, setCurrentInput] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Stări noi pentru temă — Gestionarea AI-ului
+  const [aiDisabled, setAiDisabled] = useState(false);
+  const [generatingTags, setGeneratingTags] = useState(false);
+
+  // Pasul 3 din temă: Verificăm starea serviciului AI la montarea componentei
+  useEffect(() => {
+    async function checkAiStatus() {
+      try {
+        const health = await aiHealth();
+        // AI este utilizabil doar dacă ok este true și rateLimited este fals/falsy
+        if (!health || !health.ok || health.rateLimited) {
+          setAiDisabled(true);
+        }
+      } catch (err) {
+        // Dacă microserviciul este oprit complet, apelul va arunca eroare -> dezactivăm politicos
+        setAiDisabled(true);
+      }
+    }
+    checkAiStatus();
+  }, []);
+
+  // Pasul 2 din temă: Funcția de generare a tag-urilor prin AI
+  const handleGenerateTags = async () => {
+    if (!title.trim() || aiDisabled || generatingTags) return;
+
+    try {
+      setGeneratingTags(true);
+      const result = await suggestTags(title.trim());
+      
+      if (result && result.tags) {
+        setTags((prevTags) => {
+          // Soluție defensivă: Extrage string-ul din obiecte dacă LLM-ul trimite [{tag: 'valoare'}] în loc de ['valoare']
+          const cleanNewTags = result.tags.map((t: any) => {
+            if (t && typeof t === 'object' && 'tag' in t) {
+              return String(t.tag).trim().toLowerCase();
+            }
+            return String(t).trim().toLowerCase();
+          });
+
+          // Creăm o listă unică combinând tag-urile vechi cu cele noi curățate (deduplicate)
+          const combined = Array.from(new Set([...prevTags, ...cleanNewTags]));
+          
+          // Ne asigurăm că nu depășim limita impusă de aplicație (maxim 5 tag-uri)
+          return combined.slice(0, 5);
+        });
+      }
+    } catch (error: any) {
+      console.error("AI tag generation failed:", error);
+      // Dacă primim eroare de rate limit, dezactivăm complet funcționalitatea AI
+      if (error.message && error.message.includes("groq_rate_limited")) {
+        setAiDisabled(true);
+      }
+    } finally {
+      setGeneratingTags(false);
+    }
+  };
 
   // Gestionează apăsarea tastelor Enter, Comma sau Space
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -122,15 +180,33 @@ function AskQuestion() {
           <div>
             <label style={labelStyle}>Title</label>
             <p style={hintStyle}>Be specific and imagine you’re asking a question to another person.</p>
-            <input
-              type="text"
-              placeholder="e.g. How to pass data between siblings in React?"
-              style={inputStyle}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              disabled={loading}
-            />
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <input
+                type="text"
+                placeholder="e.g. How to pass data between siblings in React?"
+                style={{ ...inputStyle, flex: 1 }}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+                disabled={loading}
+              />
+              
+              {/* Pasul 2 și 3: Butonul de generat tag-uri cu AI, vizibil doar când AI este up */}
+              {!aiDisabled && (
+                <button
+                  type="button"
+                  onClick={handleGenerateTags}
+                  disabled={loading || generatingTags || !title.trim()}
+                  style={{
+                    ...aiButtonStyle,
+                    opacity: (!title.trim() || generatingTags) ? 0.5 : 1,
+                    cursor: (!title.trim() || generatingTags) ? "not-allowed" : "pointer"
+                  }}
+                >
+                  {generatingTags ? "✦ Generating tags..." : "✦ Generate tags"}
+                </button>
+              )}
+            </div>
           </div>
 
           <div>
@@ -242,6 +318,19 @@ const inputStyle: React.CSSProperties = {
   outline: "none",
 };
 
+const aiButtonStyle: React.CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: "6px",
+  border: "1px solid #e2e8f0",
+  backgroundColor: "#f0fdf4",
+  color: "#166534",
+  fontWeight: "600",
+  fontSize: "13px",
+  whiteSpace: "nowrap",
+  transition: "all 0.2s",
+  outline: "none",
+};
+
 const textareaStyle: React.CSSProperties = {
   width: "100%",
   padding: "12px",
@@ -255,7 +344,6 @@ const textareaStyle: React.CSSProperties = {
   resize: "vertical",
 };
 
-// Box-ul care imită un input dar conține și tag-urile adăugate deja
 const tagsContainerInputStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
@@ -283,7 +371,7 @@ const tagBadgeStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   gap: "4px",
-  backgroundColor: "#e0f2fe", // Un albastru deschis superb pentru tag active
+  backgroundColor: "#e0f2fe",
   color: "#0369a1",
   padding: "4px 8px",
   borderRadius: "4px",
