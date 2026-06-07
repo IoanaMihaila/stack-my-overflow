@@ -8,6 +8,9 @@ const { requireAuth } = require('../middleware/auth');
 // =========================================================================
 router.get('/', async (req, res) => {
     try {
+        // 1. Extragere tag din query parameter-ul trimis de React (?tag=typescript)
+        const { tag } = req.query;
+
         const { data, error } = await supabase.from('questions')
             .select('*, author:profiles!author_id(id, username), question_tags(tag:tags(name)), answers(id)')
             .order('created_at', { ascending: false });
@@ -15,7 +18,23 @@ router.get('/', async (req, res) => {
         if (error)
             return res.status(500).json({ error: error.message });
 
-        const questions = data.map(q => {
+        let filteredData = data || [];
+
+        // 2. LOGICA STRETCH: Dacă a fost trimis un tag pentru filtrare
+        if (tag) {
+            const searchTag = String(tag).toLowerCase().trim();
+            
+            filteredData = filteredData.filter(q => {
+                // Verificăm dacă întrebarea are structura junction populată cu tag-ul căutat
+                return q.question_tags && q.question_tags.some(qt => {
+                    const currentTagName = qt.tag?.name || "";
+                    return currentTagName.toLowerCase().trim() === searchTag;
+                });
+            });
+        }
+
+        // 3. Maparea întrebărilor (rămâne exact logica ta originală, dar aplicată pe datele filtrate)
+        const questions = filteredData.map(q => {
             const actualCount = q.answers ? q.answers.length : 0;
             return {
                 id: q.id,

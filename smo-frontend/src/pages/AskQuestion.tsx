@@ -37,7 +37,7 @@ function AskQuestion() {
     checkAiStatus();
   }, []);
 
-  // Pasul 2 din temă: Funcția de generare a tag-urilor prin AI
+// Pasul 2 din temă: Funcția de generare a tag-urilor prin AI
   const handleGenerateTags = async () => {
     if (!title.trim() || aiDisabled || generatingTags) return;
 
@@ -47,13 +47,15 @@ function AskQuestion() {
       
       if (result && result.tags) {
         setTags((prevTags) => {
-          // Soluție defensivă: Extrage string-ul din obiecte dacă LLM-ul trimite [{tag: 'valoare'}] în loc de ['valoare']
-          const cleanNewTags = result.tags.map((t: any) => {
-            if (t && typeof t === 'object' && 'tag' in t) {
-              return String(t.tag).trim().toLowerCase();
-            }
-            return String(t).trim().toLowerCase();
-          });
+          // Soluție defensivă robustă: Extrage string-ul indiferent dacă e array pur sau structură [{tag: 'valoare'}]
+          const cleanNewTags = result.tags
+            .filter((t: any) => t !== null && t !== undefined)
+            .map((t: any) => {
+              if (typeof t === 'object' && 'tag' in t) {
+                return String(t.tag).trim().toLowerCase();
+              }
+              return String(t).trim().toLowerCase();
+            });
 
           // Creăm o listă unică combinând tag-urile vechi cu cele noi curățate (deduplicate)
           const combined = Array.from(new Set([...prevTags, ...cleanNewTags]));
@@ -64,8 +66,15 @@ function AskQuestion() {
       }
     } catch (error: any) {
       console.error("AI tag generation failed:", error);
-      // Dacă primim eroare de rate limit, dezactivăm complet funcționalitatea AI
-      if (error.message && error.message.includes("groq_rate_limited")) {
+      
+      // ✅ REPARAT: Prinde eroarea de rate limit indiferent dacă e trimisă ca cod 429 sau ca text ("too_many_requests")
+      const errorMessage = error?.message || "";
+      if (
+        errorMessage.includes("429") || 
+        errorMessage.includes("too_many_requests") || 
+        errorMessage.includes("groq_rate_limited") ||
+        errorMessage.includes("rate-limited")
+      ) {
         setAiDisabled(true);
       }
     } finally {

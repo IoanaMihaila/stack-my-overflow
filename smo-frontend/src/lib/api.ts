@@ -62,8 +62,11 @@ export async function request(path: string, options: RequestInit = {}): Promise<
 // Avantaj: daca schimbi URL-ul sau structura, modifici intr-un singur loc
 // =========================================================================
 
-export const getQuestions = () => 
-    request('/questions');
+export const getQuestions = (tag?: string) => {
+    // Dacă activeTag are o valoare (ex: "react"), path devine "/questions?tag=react"
+    const path = tag ? `/questions?tag=${encodeURIComponent(tag)}` : '/questions';
+    return request(path);
+};
 
 export const getQuestion = (id: string) => 
     request('/questions/' + id);

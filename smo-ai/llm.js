@@ -1,41 +1,42 @@
-import OpenAI from 'openai';
-import logger from './utils/logger.js';
+import OpenAI from 'openai/index.mjs';
 
-const provider = process.env.LLM_PROVIDER || 'ollama';
-let openai;
-let model;
+const PROVIDER = process.env.LLM_PROVIDER || 'groq'; // 'groq' | 'ollama'
+const isOllama = PROVIDER === 'ollama';
 
-if (provider === 'groq') {
-    openai = new OpenAI({
-        apiKey: process.env.GROQ_API_KEY,
-        baseURL: 'https://api.groq.com/openai/v1'
-    });
-    model = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
-} else {
-    // Default to Ollama
-    openai = new OpenAI({
-        apiKey: 'ollama', // Ollama doesn't need a real key but the SDK requires a string
-        baseURL: `${process.env.OLLAMA_URL || 'http://localhost:11434'}/v1`
-    });
-    model = process.env.OLLAMA_MODEL || 'llama3.2:3b';
+if (!isOllama && !process.env.GROQ_API_KEY) {
+  console.error('GROQ_API_KEY is not set (required when LLM_PROVIDER=groq)');
+  process.exit(1);
 }
 
-export async function generateTags(title) {
-    try {
-        const prompt = `Analyze the following title and return a JSON object containing an array of 3-5 relevant, lowercase tags. 
-Title: "${title}"
-Respond ONLY with a valid JSON object matching this schema: { "tags": ["tag1", "tag2"] }. Do not include markdown formatting or explanation.`;
+// The whole point of the OpenAI SDK here: one client interface, two providers.
+// Swap the baseURL (and the key) and the rest of the code is identical.
+export const llm = new OpenAI(
+  isOllama
+    ? {
+        baseURL: `${process.env.OLLAMA_URL || 'http://localhost:11434'}/v1`,
+        apiKey: 'ollama', // Ollama doesn't validate the key, but the client requires one
+      }
+    : {
+        baseURL: 'https://api.groq.com/openai/v1',
+        apiKey: process.env.GROQ_API_KEY,
+      }
+);
 
-        const response = await openai.chat.completions.create({
-            model: model,
-            messages: [{ role: 'user', content: prompt }],
-            response_format: { type: "json_object" } // Ensures the LLM outputs clean JSON
-        });
+// Groq model vs Ollama model — set independently so each machine can pick its own
+export const MODEL = isOllama
+  ? (process.env.OLLAMA_MODEL || 'llama3.2:3b')
+  : (process.env.GROQ_MODEL || 'llama-3.1-8b-instant');
 
-        const data = JSON.parse(response.choices[0].message.content);
-        return data.tags || [];
-    } catch (error) {
-        logger.error(`LLM Generation error: ${error.message}`);
-        return []; // Graceful fallback inside the microservice
-    }
+export { PROVIDER };
+
+// Groq supports prompt caching via cache_control on system messages.
+// Ollama ignores it but the client may reject the extra field — use a plain string instead.
+export function sysMsg(text) {
+  if (isOllama) {
+    return { role: 'system', content: text };
+  }
+  return {
+    role: 'system',
+    content: [{ type: 'text', text, cache_control: { type: 'ephemeral' } }],
+  };
 }

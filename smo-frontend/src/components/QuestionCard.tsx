@@ -3,11 +3,11 @@ import type { QuestionSummary } from "../types";
 interface QuestionCardProps {
   question: QuestionSummary;
   onClick?: () => void;
+  onTagClick?: (tagName: string) => void; // ✅ Adăugat: Prop nou pentru a trimite tag-ul către Home
 }
 
-function QuestionCard({ question, onClick }: QuestionCardProps) {
-  // ⚠️ TRUC DE SIGURANȚĂ: Calculăm dinamic numărul de răspunsuri indiferent de cum îl trimite backend-ul
-  // Verifică proprietatea calculată, array-ul de răspunsuri la plural, array-ul la singular sau agregarea brută.
+function QuestionCard({ question, onClick, onTagClick }: QuestionCardProps) {
+  // Trucul tău de siguranță pentru numărul de răspunsuri rămâne neschimbat
   const rawAnswers = (question as any).answers || (question as any).answer || [];
   
   const totalAnswers = typeof question.answer_count === "number" && question.answer_count > 0 
@@ -46,7 +46,6 @@ function QuestionCard({ question, onClick }: QuestionCardProps) {
           <span style={statLabelStyle}>votes</span>
         </div>
         <div style={statItemStyle}>
-          {/* CORECTAT: Afișăm numărul calculat dinamic totalAnswers */}
           <span style={{ ...statNumberStyle, color: totalAnswers > 0 ? "#16a34a" : "#475569" }}>
             {totalAnswers}
           </span>
@@ -56,21 +55,38 @@ function QuestionCard({ question, onClick }: QuestionCardProps) {
 
       <div style={footerRowStyle}>
         <div style={tagRowStyle}>
-          {/* Adăugat fallback-ul || [] și optional chaining ?. pentru a preveni orice crash */}
-          {(question.question_tags || []).map((qt: any, idx: number) => (
-            <span
-              key={idx}
-              style={{
-                backgroundColor: "#f1f5f9",
-                color: "#475569",
-                padding: "4px 10px",
-                borderRadius: "6px",
-                fontSize: "13px",
-              }}
-            >
-              {qt.tag?.name || qt.tag_name || "tag"}
-            </span>
-          ))}
+          {(question.question_tags || []).map((qt: any, idx: number) => {
+            // Extragem numele tagului exact ca în logica ta
+            const tagName = qt.tag?.name || qt.tag_name || "tag";
+            
+            return (
+              <span
+                key={idx}
+                onClick={(e) => {
+                  // ✅ CRITIC: Oprim propagarea click-ului! 
+                  // Fără asta, click-ul pe tag ar deschide și întrebarea.
+                  e.stopPropagation(); 
+                  if (onTagClick) onTagClick(tagName);
+                }}
+                style={{
+                  backgroundColor: "#f1f5f9",
+                  color: "#475569",
+                  padding: "4px 10px",
+                  borderRadius: "6px",
+                  fontSize: "13px",
+                  cursor: onTagClick ? "pointer" : "default", // Schimbăm cursorul ca să arate că e interactiv
+                }}
+                onMouseOver={(e) => {
+                  if (onTagClick) e.currentTarget.style.backgroundColor = "#e2e8f0";
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = "#f1f5f9";
+                }}
+              >
+                {tagName}
+              </span>
+            );
+          })}
         </div>
         
         <div style={metaStyle}>
